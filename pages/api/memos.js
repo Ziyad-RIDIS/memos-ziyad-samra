@@ -13,7 +13,18 @@ export default async function handler(req, res) {
       });
       const d = await r.json();
       console.log("GET result:", JSON.stringify(d).slice(0, 100));
-      const data = d.result ? JSON.parse(d.result) : [];
+      let data = [];
+      if (d.result) {
+        try {
+          const parsed = JSON.parse(d.result);
+          // Handle double-serialized data
+          if (typeof parsed === "string") {
+            data = JSON.parse(parsed);
+          } else {
+            data = parsed;
+          }
+        } catch {}
+      }
       res.status(200).json(Array.isArray(data) ? data : []);
     } catch (e) {
       console.log("GET error:", e.message);
