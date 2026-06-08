@@ -294,6 +294,7 @@ export default function Home() {
     if (!loaded) return;
     try { localStorage.setItem("memos-local", JSON.stringify(items)); } catch {}
     const t = setTimeout(async () => {
+      if (items.length === 0) return; // ne jamais sauvegarder une liste vide
       setSyncing(true);
       await apiSet(items);
       setLastSync(new Date());
@@ -305,7 +306,7 @@ export default function Home() {
   useEffect(() => {
     const iv = setInterval(async () => {
       const data = await apiGet();
-      if (data) { setItems(data); setLastSync(new Date()); }
+      if (data && data.length > 0) { setItems(data); setLastSync(new Date()); }
     }, 15000);
     return () => clearInterval(iv);
   }, []);
