@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Head from "next/head";
 
 const USERS = ["Ziyad", "Samra", "Tous les deux"];
@@ -321,13 +321,16 @@ export default function Home() {
 
   useEffect(() => {
     const iv = setInterval(async () => {
+      // Ne pas écraser si une mutation a eu lieu dans les 5 dernières secondes
+      if (Date.now() - lastMutationRef.current < 5000) return;
       const data = await apiGet();
       if (data && data.length > 0) { setItems(data); setLastSync(new Date()); }
     }, 20000);
     return () => clearInterval(iv);
   }, []);
 
-  const mutate = useCallback(fn => setItems(p => fn(p)), []);
+  const lastMutationRef = React.useRef(0);
+  const mutate = useCallback(fn => { lastMutationRef.current = Date.now(); setItems(p => fn(p)); }, []);
   const addItem = item => mutate(p => [{ ...item, spaceId: activeSpace }, ...p]);
   const deleteItem = id => mutate(p => p.filter(i => i.id !== id));
   const pinItem = id => mutate(p => p.map(i => i.id === id ? { ...i, pinned: !i.pinned } : i));
