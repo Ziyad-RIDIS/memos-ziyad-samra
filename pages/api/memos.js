@@ -1,5 +1,5 @@
-const UPSTASH_URL = "https://champion-tarpon-70830.upstash.io";
-const UPSTASH_TOKEN = "gQAAAAAAARSuAAIgcDE3M2ZlMGM1NDY4MDg0NmQ5YjA4ZGRmYTc3OTRmOWU2MA";
+const UPSTASH_URL = process.env.UPSTASH_URL;
+const UPSTASH_TOKEN = process.env.UPSTASH_TOKEN;
 const REDIS_KEY = "ziyad-samra-memos-v2";
 
 export default async function handler(req, res) {
