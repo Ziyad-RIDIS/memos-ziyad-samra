@@ -282,9 +282,25 @@ export default function Home() {
   useEffect(() => {
     (async () => {
       setSyncing(true);
+      // D'abord charger le local
+      let local = [];
+      try { local = JSON.parse(localStorage.getItem("memos-local") || "[]"); if (!Array.isArray(local)) local = []; } catch {}
+      
+      // Ensuite essayer Redis
       const data = await apiGet();
-      if (data) { setItems(data); setLastSync(new Date()); }
-      else { try { const l = JSON.parse(localStorage.getItem("memos-local") || "[]"); setItems(Array.isArray(l) ? l : []); } catch { setItems([]); } }
+      
+      if (data && data.length > 0) {
+        // Redis a des données → utiliser Redis
+        setItems(data);
+        setLastSync(new Date());
+      } else if (local.length > 0) {
+        // Redis vide mais local a des données → utiliser local et sauvegarder sur Redis
+        setItems(local);
+        await apiSet(local);
+        setLastSync(new Date());
+      }
+      // sinon tout est vide → rester vide
+      
       setSyncing(false);
       setLoaded(true);
     })();
@@ -294,12 +310,12 @@ export default function Home() {
     if (!loaded) return;
     try { localStorage.setItem("memos-local", JSON.stringify(items)); } catch {}
     const t = setTimeout(async () => {
-      if (items.length === 0) return; // ne jamais sauvegarder une liste vide
+      if (items.length === 0) return;
       setSyncing(true);
       await apiSet(items);
       setLastSync(new Date());
       setSyncing(false);
-    }, 900);
+    }, 1500);
     return () => clearTimeout(t);
   }, [items, loaded]);
 
@@ -307,7 +323,7 @@ export default function Home() {
     const iv = setInterval(async () => {
       const data = await apiGet();
       if (data && data.length > 0) { setItems(data); setLastSync(new Date()); }
-    }, 15000);
+    }, 20000);
     return () => clearInterval(iv);
   }, []);
 
