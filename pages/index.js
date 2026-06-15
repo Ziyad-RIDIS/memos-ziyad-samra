@@ -6,40 +6,33 @@ const USERS = ["Ziyad", "Samra", "Tous les deux"];
 const SPACES = [
   {
     id: "conforama", label: "Conforama", emoji: "🛋️",
-    bg: "#fef9ec", tape: "#f5e6a3",
-    headerBg: "#2c2416", headerAccent: "#f0c040",
-    postColors: ["#fff9d6", "#fff3b0", "#ffeaa0", "#fde68a"],
+    accent: "#E8001C", bg: "#fff8f8", lightBg: "#fff0f0",
     cats: ["Produits", "E-commerce", "Marketing", "RH", "Opérations", "Finance", "Autre"],
   },
   {
     id: "fds", label: "Fabrique de Style", emoji: "🪑",
-    bg: "#f0f4ff", tape: "#c0caff",
-    headerBg: "#111828", headerAccent: "#7c8fff",
-    postColors: ["#e8edff", "#dde4ff", "#d0d9ff", "#eef0ff"],
+    accent: "#374151", bg: "#f8f9fa", lightBg: "#f1f3f5",
     cats: ["Produits", "Marketing", "Stocks", "Fournisseurs", "Opérations", "Finance", "Autre"],
   },
   {
     id: "couple", label: "Ziyad & Samra", emoji: "❤️",
-    bg: "#fdf0f3", tape: "#f9c4d2",
-    headerBg: "#2a1018", headerAccent: "#f0708a",
-    postColors: ["#fce4ec", "#f8bbd0", "#fdd5de", "#ffeef2"],
+    accent: "#e8637a", bg: "#fff8f9", lightBg: "#ffeef1",
     cats: ["Courses", "Maison", "Voyage", "Projet", "Sortie", "Admin", "Autre"],
   },
   {
     id: "perso", label: "Ziyado ✦", emoji: "✦",
-    bg: "#f0f7f2", tape: "#b8e0c4",
-    headerBg: "#0e2418", headerAccent: "#5dd49a",
-    postColors: ["#e8f5ee", "#d4eddf", "#c8f0d8", "#f0faf4"],
+    accent: "#059669", bg: "#f8fffe", lightBg: "#ecfdf5",
     cats: ["Santé", "Apprentissage", "Voyage", "Finances", "Loisirs", "Autre"],
   },
 ];
 
-const PRIORITIES = ["normale", "importante", "urgente"];
 const PRIORITY_META = {
-  normale:    { label: "·",   color: "#bbb" },
-  importante: { label: "!!",  color: "#d4a017" },
-  urgente:    { label: "!!!", color: "#d94f4f" },
+  normale:    { label: "Normale",    color: "#9ca3af", dot: "#d1d5db" },
+  importante: { label: "Importante", color: "#d97706", dot: "#fbbf24" },
+  urgente:    { label: "Urgente",    color: "#dc2626", dot: "#ef4444" },
 };
+
+const WHO_COLORS = { Ziyad: "#3b82f6", Samra: "#e8637a", "Tous les deux": "#059669" };
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
@@ -61,123 +54,156 @@ async function apiSet(data) {
   } catch {}
 }
 
-function Tape({ color, rotation }) {
+function Badge({ children, color, bg }) {
   return (
-    <div style={{
-      position: "absolute", top: -10, left: "50%",
-      transform: `translateX(-50%) rotate(${rotation}deg)`,
-      width: 48, height: 20, background: color,
-      opacity: 0.75, borderRadius: 2, zIndex: 2,
-      boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-    }} />
+    <span style={{
+      fontSize: 11, fontWeight: 600, padding: "2px 8px",
+      borderRadius: 20, color: color,
+      background: bg || color + "18",
+      letterSpacing: "0.02em",
+    }}>{children}</span>
   );
 }
 
-function WhoBadge({ who }) {
-  const map = { Ziyad: "#4f8ef7", Samra: "#e8637a", "Tous les deux": "#48c78e" };
-  return (
-    <span style={{ fontSize: 11, color: map[who] || "#999", fontWeight: 700 }}>— {who}</span>
-  );
-}
-
-function PostIt({ item, space, onDelete, onPin, onToggleDone, onToggleListItem, onDeleteListItem, onAddListItem, colorIndex }) {
+function Card({ item, space, onDelete, onPin, onToggleDone, onToggleListItem, onDeleteListItem, onAddListItem }) {
   const [open, setOpen] = useState(false);
   const [newLI, setNewLI] = useState("");
 
-  const rotation = ((item.id.charCodeAt(0) % 7) - 3) * 0.6;
-  const bgColor = space.postColors[colorIndex % space.postColors.length];
-  const tapeRot = ((item.id.charCodeAt(1) % 5) - 2) * 3;
   const doneCount = item.type === "list" ? (item.items || []).filter(i => i.done).length : 0;
   const totalCount = item.type === "list" ? (item.items || []).length : 0;
   const isOverdue = item.dueDate && new Date(item.dueDate) < new Date() && !item.done;
+  const pm = PRIORITY_META[item.priority] || PRIORITY_META.normale;
 
   return (
     <div style={{
-      position: "relative", marginBottom: 8,
-      transform: open ? "rotate(0deg) scale(1.02)" : `rotate(${rotation}deg)`,
-      transition: "transform 0.25s cubic-bezier(.34,1.56,.64,1)",
-      zIndex: open ? 10 : item.pinned ? 3 : 1,
+      background: "#fff",
+      borderRadius: 16,
+      marginBottom: 10,
+      boxShadow: open ? "0 4px 24px rgba(0,0,0,0.10)" : "0 1px 4px rgba(0,0,0,0.07)",
+      border: "1px solid #f0f0f0",
+      borderLeft: `4px solid ${item.done ? "#e5e7eb" : space.accent}`,
+      opacity: item.done ? 0.6 : 1,
+      transition: "all 0.2s",
+      overflow: "hidden",
     }}>
-      <Tape color={space.tape} rotation={tapeRot} />
+      {/* Main row */}
       <div onClick={() => setOpen(o => !o)} style={{
-        background: item.done ? bgColor + "88" : bgColor,
-        borderRadius: 3, padding: "22px 16px 14px",
-        boxShadow: open ? "4px 8px 24px rgba(0,0,0,0.18)" : item.pinned ? "3px 5px 14px rgba(0,0,0,0.15)" : "2px 3px 8px rgba(0,0,0,0.1)",
-        cursor: "pointer", position: "relative", minHeight: 100,
-        backgroundImage: "repeating-linear-gradient(transparent,transparent 24px,rgba(0,0,0,0.04) 24px,rgba(0,0,0,0.04) 25px)",
+        padding: "14px 16px", cursor: "pointer",
+        display: "flex", alignItems: "flex-start", gap: 12,
       }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            {item.pinned && <span style={{ fontSize: 14 }}>📌</span>}
-            {item.type === "list" && <span style={{ fontSize: 12, color: "#888" }}>☑</span>}
-            <span style={{ fontSize: 11, color: PRIORITY_META[item.priority]?.color, fontWeight: 700 }}>
-              {PRIORITY_META[item.priority]?.label}
-            </span>
-          </div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button onClick={e => { e.stopPropagation(); onPin(item.id); }} style={{ background: "none", border: "none", fontSize: 14, opacity: item.pinned ? 1 : 0.3, padding: 0 }}>📌</button>
-            <button onClick={e => { e.stopPropagation(); onDelete(item.id); }} style={{ background: "none", border: "none", fontSize: 16, color: "#bbb", padding: 0, lineHeight: 1 }}>×</button>
-          </div>
-        </div>
-
-        <div style={{
-          fontSize: 19, fontWeight: 700,
-          color: item.done ? "#bbb" : "#2a2010",
-          textDecoration: item.done ? "line-through" : "none",
-          lineHeight: 1.2, marginBottom: 6,
-        }}>{item.title}</div>
-
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <WhoBadge who={item.assignedTo} />
-          {item.type === "list" && totalCount > 0 && <span style={{ fontSize: 10, color: "#aaa" }}>{doneCount}/{totalCount}</span>}
-          {item.dueDate && <span style={{ fontSize: 10, color: isOverdue ? "#d94f4f" : "#aaa" }}>{isOverdue ? "⚠ " : "📅 "}{new Date(item.dueDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}</span>}
-          {item.waiting && <span style={{ fontSize: 10, color: "#d4a017" }}>⏳ en attente</span>}
-        </div>
-
-        {open && (
-          <div onClick={e => e.stopPropagation()} style={{ marginTop: 14, borderTop: "1px dashed rgba(0,0,0,0.1)", paddingTop: 12 }}>
-            {item.type === "memo" && (
-              <button onClick={() => onToggleDone(item.id)} style={{
-                background: item.done ? "#2a2010" : "transparent",
-                border: "2px solid #2a2010", borderRadius: 4,
-                padding: "4px 12px", fontSize: 13, marginBottom: 10,
-                color: item.done ? "#fff" : "#2a2010", fontWeight: 700,
-              }}>{item.done ? "✓ Fait" : "Marquer fait"}</button>
-            )}
-            {item.body && <p style={{ fontSize: 15, color: "#555", lineHeight: 1.7, marginBottom: 12 }}>{item.body}</p>}
-
-            {item.type === "list" && (
-              <div style={{ marginBottom: 12 }}>
-                {(item.items || []).map(li => (
-                  <div key={li.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderBottom: "1px dashed rgba(0,0,0,0.08)" }}>
-                    <button onClick={() => onToggleListItem(item.id, li.id)} style={{
-                      width: 16, height: 16, borderRadius: 3, flexShrink: 0,
-                      border: `2px solid ${li.done ? "#2a2010" : "#ccc"}`,
-                      background: li.done ? "#2a2010" : "transparent",
-                    }} />
-                    <span style={{ flex: 1, fontSize: 15, color: li.done ? "#aaa" : "#333", textDecoration: li.done ? "line-through" : "none" }}>{li.text}</span>
-                    <button onClick={() => onDeleteListItem(item.id, li.id)} style={{ background: "none", border: "none", color: "#ccc", fontSize: 14, padding: 0 }}>×</button>
-                  </div>
-                ))}
-                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                  <input value={newLI} onChange={e => setNewLI(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter" && newLI.trim()) { onAddListItem(item.id, newLI.trim()); setNewLI(""); } }}
-                    placeholder="Ajouter…"
-                    style={{ flex: 1, background: "rgba(255,255,255,0.6)", border: "1px dashed rgba(0,0,0,0.2)", borderRadius: 4, padding: "5px 8px", fontSize: 14, outline: "none", color: "#333" }}
-                  />
-                  <button onClick={() => { if (newLI.trim()) { onAddListItem(item.id, newLI.trim()); setNewLI(""); } }}
-                    style={{ background: "#2a2010", border: "none", color: "#fff", borderRadius: 4, padding: "5px 12px", fontSize: 16 }}>+</button>
-                </div>
-              </div>
-            )}
-
-            <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", fontSize: 11, color: "#bbb" }}>
-              <span>{item.category}</span>
-              <span>{item.date}</span>
-            </div>
+        {/* Done circle */}
+        {item.type === "memo" && (
+          <button onClick={e => { e.stopPropagation(); onToggleDone(item.id); }} style={{
+            width: 22, height: 22, borderRadius: "50%", flexShrink: 0, marginTop: 1,
+            border: `2px solid ${item.done ? space.accent : "#d1d5db"}`,
+            background: item.done ? space.accent : "#fff",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            {item.done && <span style={{ color: "#fff", fontSize: 12, lineHeight: 1 }}>✓</span>}
+          </button>
+        )}
+        {item.type === "list" && (
+          <div style={{
+            width: 22, height: 22, borderRadius: 6, flexShrink: 0, marginTop: 1,
+            border: `2px solid ${space.accent}`,
+            background: doneCount === totalCount && totalCount > 0 ? space.accent : "#fff",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <span style={{ fontSize: 11, color: doneCount === totalCount && totalCount > 0 ? "#fff" : space.accent }}>☑</span>
           </div>
         )}
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontSize: 15, fontWeight: 600,
+            color: item.done ? "#9ca3af" : "#111827",
+            textDecoration: item.done ? "line-through" : "none",
+            marginBottom: 6, lineHeight: 1.3,
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          }}>{item.pinned && "📌 "}{item.title}</div>
+
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <Badge color={pm.color}>{pm.label}</Badge>
+            <Badge color={WHO_COLORS[item.assignedTo] || "#9ca3af"}>{item.assignedTo}</Badge>
+            {item.type === "list" && totalCount > 0 && (
+              <Badge color="#6b7280">{doneCount}/{totalCount}</Badge>
+            )}
+            {item.dueDate && (
+              <Badge color={isOverdue ? "#dc2626" : "#6b7280"}>
+                {isOverdue ? "⚠ " : "📅 "}{new Date(item.dueDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}
+              </Badge>
+            )}
+            {item.waiting && <Badge color="#d97706">⏳ En attente</Badge>}
+            <span style={{ fontSize: 11, color: "#d1d5db" }}>{item.category}</span>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+          <button onClick={e => { e.stopPropagation(); onPin(item.id); }} style={{
+            background: "none", border: "none", fontSize: 16,
+            opacity: item.pinned ? 1 : 0.2, padding: "2px 4px",
+          }}>📌</button>
+          <button onClick={e => { e.stopPropagation(); onDelete(item.id); }} style={{
+            background: "none", border: "none", color: "#d1d5db",
+            fontSize: 20, padding: "0 4px", lineHeight: 1,
+          }}>×</button>
+        </div>
       </div>
+
+      {/* Expanded */}
+      {open && (
+        <div style={{ padding: "0 16px 16px", borderTop: "1px solid #f3f4f6" }}>
+          {item.body && (
+            <p style={{ color: "#6b7280", fontSize: 14, lineHeight: 1.6, margin: "12px 0" }}>{item.body}</p>
+          )}
+
+          {item.type === "list" && (
+            <div style={{ marginTop: 12 }}>
+              {(item.items || []).map(li => (
+                <div key={li.id} style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "8px 0", borderBottom: "1px solid #f9fafb",
+                }}>
+                  <button onClick={() => onToggleListItem(item.id, li.id)} style={{
+                    width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+                    border: `2px solid ${li.done ? space.accent : "#d1d5db"}`,
+                    background: li.done ? space.accent : "#fff",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    {li.done && <span style={{ color: "#fff", fontSize: 11 }}>✓</span>}
+                  </button>
+                  <span style={{
+                    flex: 1, fontSize: 14,
+                    color: li.done ? "#9ca3af" : "#374151",
+                    textDecoration: li.done ? "line-through" : "none",
+                  }}>{li.text}</span>
+                  <button onClick={() => onDeleteListItem(item.id, li.id)} style={{
+                    background: "none", border: "none", color: "#d1d5db", fontSize: 16,
+                  }}>×</button>
+                </div>
+              ))}
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <input value={newLI} onChange={e => setNewLI(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && newLI.trim()) { onAddListItem(item.id, newLI.trim()); setNewLI(""); } }}
+                  placeholder="Ajouter un item…"
+                  style={{
+                    flex: 1, border: "1.5px solid #e5e7eb", borderRadius: 10,
+                    padding: "8px 12px", fontSize: 14, outline: "none", color: "#374151",
+                    background: "#f9fafb",
+                  }}
+                />
+                <button onClick={() => { if (newLI.trim()) { onAddListItem(item.id, newLI.trim()); setNewLI(""); } }}
+                  style={{
+                    background: space.accent, border: "none", color: "#fff",
+                    borderRadius: 10, padding: "8px 14px", fontSize: 18, fontWeight: 700,
+                  }}>+</button>
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginTop: 10, fontSize: 11, color: "#d1d5db", textAlign: "right" }}>{item.date}</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -194,73 +220,128 @@ function AddModal({ space, onAdd, onClose }) {
   const [listItems, setListItems] = useState([]);
   const [newLI, setNewLI] = useState("");
 
-  const iStyle = { width: "100%", background: "rgba(255,255,255,0.7)", border: "1px dashed rgba(0,0,0,0.2)", borderRadius: 6, color: "#2a2010", fontSize: 16, padding: "10px 12px", outline: "none", marginBottom: 10 };
-  const sStyle = { ...iStyle, marginBottom: 0, fontSize: 14 };
+  const iStyle = {
+    width: "100%", border: "1.5px solid #e5e7eb", borderRadius: 12,
+    padding: "11px 14px", fontSize: 15, outline: "none",
+    color: "#111827", background: "#f9fafb", marginBottom: 10,
+    fontFamily: "inherit",
+  };
 
   const addLI = () => { if (!newLI.trim()) return; setListItems(p => [...p, { id: uid(), text: newLI.trim(), done: false }]); setNewLI(""); };
 
-  const submit = () => {
-    if (!title.trim()) return;
-    onAdd({ id: uid(), type, title: title.trim(), body: type === "memo" ? body.trim() : "", items: type === "list" ? listItems : [], priority, category, assignedTo, dueDate, waiting, date: new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }), done: false, pinned: false, spaceId: space.id, createdAt: Date.now() });
-    onClose();
-  };
-
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(4px)", padding: 16 }}>
+    <div onClick={onClose} style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+      zIndex: 1000, backdropFilter: "blur(4px)",
+    }}>
       <div onClick={e => e.stopPropagation()} style={{
-        background: space.postColors[0], borderRadius: 4, padding: "32px 24px 24px",
-        width: "100%", maxWidth: 420, maxHeight: "90vh", overflowY: "auto",
-        boxShadow: "6px 10px 40px rgba(0,0,0,0.25)", position: "relative",
-        backgroundImage: "repeating-linear-gradient(transparent,transparent 28px,rgba(0,0,0,0.04) 28px,rgba(0,0,0,0.04) 29px)",
+        background: "#fff", borderRadius: "24px 24px 0 0",
+        padding: "24px 20px 36px", width: "100%", maxWidth: 500,
+        maxHeight: "90vh", overflowY: "auto",
+        boxShadow: "0 -8px 40px rgba(0,0,0,0.15)",
       }}>
-        <div style={{ position: "absolute", top: -10, left: "50%", transform: "translateX(-50%) rotate(-1deg)", width: 56, height: 20, background: space.tape, opacity: 0.8, borderRadius: 2 }} />
-        <h3 style={{ fontSize: 24, fontWeight: 700, color: "#2a2010", marginBottom: 20 }}>
-          {space.emoji} Nouveau {type === "list" ? "liste" : "mémo"}
-        </h3>
+        {/* Handle bar */}
+        <div style={{ width: 40, height: 4, background: "#e5e7eb", borderRadius: 2, margin: "0 auto 20px" }} />
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+          <h3 style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>
+            {space.emoji} Nouveau
+          </h3>
+          <button onClick={onClose} style={{ background: "#f3f4f6", border: "none", borderRadius: "50%", width: 32, height: 32, fontSize: 18, color: "#6b7280" }}>×</button>
+        </div>
+
+        {/* Type toggle */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, background: "#f3f4f6", borderRadius: 12, padding: 4 }}>
           {["memo", "list"].map(t => (
-            <button key={t} onClick={() => setType(t)} style={{ flex: 1, padding: 8, background: type === t ? "#2a2010" : "rgba(255,255,255,0.5)", border: "1px dashed rgba(0,0,0,0.2)", color: type === t ? "#fff" : "#777", borderRadius: 6, fontSize: 15, fontWeight: 700 }}>
+            <button key={t} onClick={() => setType(t)} style={{
+              flex: 1, padding: "8px",
+              background: type === t ? "#fff" : "transparent",
+              border: "none", borderRadius: 10,
+              color: type === t ? space.accent : "#9ca3af",
+              fontSize: 14, fontWeight: 600, fontFamily: "inherit",
+              boxShadow: type === t ? "0 1px 4px rgba(0,0,0,0.1)" : "none",
+            }}>
               {t === "memo" ? "📝 Mémo" : "☑ Liste"}
             </button>
           ))}
         </div>
 
-        <input autoFocus placeholder={type === "list" ? "Nom de la liste…" : "Titre du mémo…"} value={title} onChange={e => setTitle(e.target.value)} style={iStyle} />
-        {type === "memo" && <textarea placeholder="Détails…" value={body} onChange={e => setBody(e.target.value)} rows={3} style={{ ...iStyle, resize: "vertical", lineHeight: 1.5 }} />}
+        <input autoFocus placeholder={type === "list" ? "Nom de la liste…" : "Titre…"} value={title} onChange={e => setTitle(e.target.value)} style={{ ...iStyle, fontSize: 16, fontWeight: 600 }} />
+
+        {type === "memo" && (
+          <textarea placeholder="Détails (optionnel)…" value={body} onChange={e => setBody(e.target.value)} rows={3}
+            style={{ ...iStyle, resize: "none", lineHeight: 1.5 }} />
+        )}
 
         {type === "list" && (
           <div style={{ marginBottom: 10 }}>
             {listItems.map((li, i) => (
-              <div key={li.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderBottom: "1px dashed rgba(0,0,0,0.1)" }}>
-                <span style={{ color: "#bbb" }}>·</span>
-                <span style={{ flex: 1, fontSize: 15, color: "#444" }}>{li.text}</span>
-                <button onClick={() => setListItems(p => p.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: "#ccc", fontSize: 15 }}>×</button>
+              <div key={li.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f3f4f6" }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: space.accent, flexShrink: 0 }} />
+                <span style={{ flex: 1, fontSize: 14, color: "#374151" }}>{li.text}</span>
+                <button onClick={() => setListItems(p => p.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: "#d1d5db", fontSize: 16 }}>×</button>
               </div>
             ))}
-            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-              <input value={newLI} onChange={e => setNewLI(e.target.value)} onKeyDown={e => e.key === "Enter" && addLI()} placeholder="Item… (Entrée)" style={{ ...iStyle, marginBottom: 0, flex: 1, fontSize: 14 }} />
-              <button onClick={addLI} style={{ background: "#2a2010", border: "none", color: "#fff", borderRadius: 6, padding: "8px 14px", fontSize: 18 }}>+</button>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <input value={newLI} onChange={e => setNewLI(e.target.value)} onKeyDown={e => e.key === "Enter" && addLI()}
+                placeholder="Item… (Entrée)" style={{ ...iStyle, marginBottom: 0, flex: 1 }} />
+              <button onClick={addLI} style={{ background: space.accent, border: "none", color: "#fff", borderRadius: 12, padding: "0 16px", fontSize: 20, fontWeight: 700 }}>+</button>
             </div>
           </div>
         )}
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
-          <div><div style={{ fontSize: 12, color: "#aaa", marginBottom: 4 }}>Priorité</div><select value={priority} onChange={e => setPriority(e.target.value)} style={sStyle}>{PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}</select></div>
-          <div><div style={{ fontSize: 12, color: "#aaa", marginBottom: 4 }}>Catégorie</div><select value={category} onChange={e => setCategory(e.target.value)} style={sStyle}>{space.cats.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-          <div><div style={{ fontSize: 12, color: "#aaa", marginBottom: 4 }}>Assigné à</div><select value={assignedTo} onChange={e => setAssignedTo(e.target.value)} style={sStyle}>{USERS.map(u => <option key={u} value={u}>{u}</option>)}</select></div>
-          <div><div style={{ fontSize: 12, color: "#aaa", marginBottom: 4 }}>Échéance</div><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} style={{ ...sStyle, colorScheme: "light" }} /></div>
+          {[
+            { label: "Priorité", val: priority, set: setPriority, opts: ["normale", "importante", "urgente"] },
+            { label: "Catégorie", val: category, set: setCategory, opts: space.cats },
+            { label: "Assigné à", val: assignedTo, set: setAssignedTo, opts: USERS },
+          ].map(({ label, val, set, opts }) => (
+            <div key={label}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
+              <select value={val} onChange={e => set(e.target.value)} style={{ ...iStyle, marginBottom: 0, fontSize: 13 }}>
+                {opts.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+          ))}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>Échéance</div>
+            <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} style={{ ...iStyle, marginBottom: 0, fontSize: 13, colorScheme: "light" }} />
+          </div>
         </div>
 
-        <div onClick={() => setWaiting(w => !w)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: waiting ? "rgba(0,0,0,0.06)" : "transparent", border: "1px dashed rgba(0,0,0,0.15)", borderRadius: 6, marginBottom: 16 }}>
-          <div style={{ width: 14, height: 14, borderRadius: 3, border: "2px solid #aaa", background: waiting ? "#2a2010" : "transparent" }} />
-          <span style={{ fontSize: 14, color: waiting ? "#2a2010" : "#aaa", fontWeight: 700 }}>⏳ En attente de quelqu'un</span>
+        <div onClick={() => setWaiting(w => !w)} style={{
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "12px 14px", borderRadius: 12,
+          background: waiting ? space.accent + "12" : "#f9fafb",
+          border: `1.5px solid ${waiting ? space.accent + "44" : "#e5e7eb"}`,
+          cursor: "pointer", marginBottom: 16,
+        }}>
+          <div style={{
+            width: 20, height: 20, borderRadius: 6,
+            border: `2px solid ${waiting ? space.accent : "#d1d5db"}`,
+            background: waiting ? space.accent : "#fff",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            {waiting && <span style={{ color: "#fff", fontSize: 12 }}>✓</span>}
+          </div>
+          <span style={{ fontSize: 14, color: waiting ? space.accent : "#6b7280", fontWeight: waiting ? 600 : 400 }}>
+            ⏳ En attente de quelqu'un
+          </span>
         </div>
 
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button onClick={onClose} style={{ background: "transparent", border: "1px dashed rgba(0,0,0,0.2)", color: "#aaa", borderRadius: 6, padding: "8px 16px", fontSize: 15 }}>Annuler</button>
-          <button onClick={submit} style={{ background: "#2a2010", border: "none", color: "#f5e9c8", borderRadius: 6, padding: "8px 20px", fontSize: 16, fontWeight: 700, opacity: title.trim() ? 1 : 0.4 }}>Coller ✓</button>
-        </div>
+        <button onClick={() => {
+          if (!title.trim()) return;
+          onAdd({ id: uid(), type, title: title.trim(), body: type === "memo" ? body.trim() : "", items: type === "list" ? listItems : [], priority, category, assignedTo, dueDate, waiting, date: new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }), done: false, pinned: false, spaceId: space.id, createdAt: Date.now() });
+          onClose();
+        }} style={{
+          width: "100%", padding: "14px", background: space.accent,
+          border: "none", borderRadius: 14, color: "#fff",
+          fontSize: 16, fontWeight: 700, fontFamily: "inherit",
+          opacity: title.trim() ? 1 : 0.4,
+        }}>
+          Ajouter ✓
+        </button>
       </div>
     </div>
   );
@@ -277,30 +358,15 @@ export default function Home() {
   const [search, setSearch] = useState("");
 
   const space = SPACES.find(s => s.id === activeSpace);
-  const FILTERS = ["tous", "épinglés", "listes", "urgents", "en attente", "Ziyad", "Samra", "terminés"];
 
   useEffect(() => {
     (async () => {
       setSyncing(true);
-      // D'abord charger le local
       let local = [];
       try { local = JSON.parse(localStorage.getItem("memos-local") || "[]"); if (!Array.isArray(local)) local = []; } catch {}
-      
-      // Ensuite essayer Redis
       const data = await apiGet();
-      
-      if (data && data.length > 0) {
-        // Redis a des données → utiliser Redis
-        setItems(data);
-        setLastSync(new Date());
-      } else if (local.length > 0) {
-        // Redis vide mais local a des données → utiliser local et sauvegarder sur Redis
-        setItems(local);
-        await apiSet(local);
-        setLastSync(new Date());
-      }
-      // sinon tout est vide → rester vide
-      
+      if (data && data.length > 0) { setItems(data); setLastSync(new Date()); }
+      else if (local.length > 0) { setItems(local); await apiSet(local); setLastSync(new Date()); }
       setSyncing(false);
       setLoaded(true);
     })();
@@ -328,113 +394,152 @@ export default function Home() {
   const addLI = (iid, text) => mutate(p => p.map(i => i.id === iid ? { ...i, items: [...(i.items || []), { id: uid(), text, done: false }] } : i));
 
   const spaceItems = items.filter(i => i.spaceId === activeSpace);
+  const FILTERS = [
+    { id: "tous", label: "Tous" },
+    { id: "épinglés", label: "📌" },
+    { id: "listes", label: "☑ Listes" },
+    { id: "urgents", label: "🔴 Urgents" },
+    { id: "Ziyad", label: "Ziyad" },
+    { id: "Samra", label: "Samra" },
+    { id: "terminés", label: "✓ Faits" },
+  ];
+
   const filtered = spaceItems.filter(i => {
     if (search && !i.title.toLowerCase().includes(search.toLowerCase())) return false;
-    if (filter === "tous") return true;
+    if (filter === "tous") return !i.done;
     if (filter === "épinglés") return i.pinned;
     if (filter === "listes") return i.type === "list";
-    if (filter === "en attente") return i.waiting;
-    if (filter === "terminés") return i.done;
     if (filter === "urgents") return i.priority === "urgente" && !i.done;
-    if (filter === "Ziyad") return i.assignedTo === "Ziyad";
-    if (filter === "Samra") return i.assignedTo === "Samra";
+    if (filter === "terminés") return i.done;
+    if (filter === "Ziyad") return i.assignedTo === "Ziyad" && !i.done;
+    if (filter === "Samra") return i.assignedTo === "Samra" && !i.done;
     return true;
   }).sort((a, b) => {
     if (a.pinned && !b.pinned) return -1;
     if (!a.pinned && b.pinned) return 1;
-    if (a.done && !b.done) return 1;
-    if (!a.done && b.done) return -1;
     return ({ urgente: 0, importante: 1, normale: 2 }[a.priority] || 2) - ({ urgente: 0, importante: 1, normale: 2 }[b.priority] || 2);
   });
+
+  const urgentCount = spaceItems.filter(i => i.priority === "urgente" && !i.done).length;
 
   return (
     <>
       <Head>
         <title>Mémos · Ziyad & Samra</title>
-        <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=Reenie+Beanie&display=swap" rel="stylesheet" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
       </Head>
-      <div style={{ minHeight: "100vh", background: space.bg, transition: "background 0.4s", fontFamily: "'Caveat', cursive" }}>
+      <div style={{ minHeight: "100vh", background: space.bg, fontFamily: "'Inter', sans-serif" }}>
 
         {/* HEADER */}
-        <div style={{ background: space.headerBg, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 2px 12px rgba(0,0,0,0.2)" }}>
-          <div>
-            <div style={{ fontFamily: "'Reenie Beanie', cursive", fontSize: 28, color: space.headerAccent, letterSpacing: "0.04em", lineHeight: 1 }}>
-              {space.label} {space.emoji}
+        <div style={{
+          background: "#fff", padding: "16px 16px 0",
+          boxShadow: "0 1px 0 #f0f0f0", position: "sticky", top: 0, zIndex: 50,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: "#111827" }}>
+                {space.emoji} {space.label}
+              </div>
+              <div style={{ fontSize: 11, color: syncing ? "#f59e0b" : "#9ca3af", marginTop: 1 }}>
+                {syncing ? "⟳ Synchronisation…" : lastSync ? `✓ Sync ${lastSync.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : ""}
+              </div>
             </div>
-            <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>
-              {syncing ? "⟳ sync…" : lastSync ? `✓ ${lastSync.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : "local"}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={async () => {
+                setSyncing(true);
+                const data = await apiGet();
+                if (data && data.length > 0) { setItems(data); setLastSync(new Date()); }
+                setSyncing(false);
+              }} style={{
+                background: "#f3f4f6", border: "none", borderRadius: 12,
+                width: 40, height: 40, fontSize: 18, color: "#6b7280",
+              }}>↻</button>
+              <button onClick={() => setShowAdd(true)} style={{
+                background: space.accent, border: "none", color: "#fff",
+                borderRadius: 12, width: 40, height: 40, fontSize: 22, fontWeight: 700,
+              }}>+</button>
             </div>
           </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button onClick={async () => {
-            setSyncing(true);
-            const data = await apiGet();
-            if (data && data.length > 0) { setItems(data); setLastSync(new Date()); }
-            setSyncing(false);
-          }} style={{ background: "transparent", border: `1px solid ${space.headerAccent}44`, color: space.headerAccent, borderRadius: 6, padding: "9px 12px", fontSize: 16, fontFamily: "'Caveat', cursive", fontWeight: 700 }}>
-            ↻
-          </button>
-          <button onClick={() => setShowAdd(true)} style={{ background: space.headerAccent, border: "none", color: space.headerBg, borderRadius: 6, padding: "9px 18px", fontSize: 17, fontFamily: "'Caveat', cursive", fontWeight: 700, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>
-            + Coller
-          </button>
-        </div>
-        </div>
 
-        {/* TABS */}
-        <div style={{ background: space.headerBg, display: "flex", padding: "0 16px", borderBottom: `3px solid ${space.headerAccent}33`, overflowX: "auto" }}>
-          {SPACES.map(s => (
-            <button key={s.id} onClick={() => { setActiveSpace(s.id); setFilter("tous"); }} style={{
-              background: "none", border: "none",
-              borderBottom: activeSpace === s.id ? `3px solid ${s.headerAccent}` : "3px solid transparent",
-              color: activeSpace === s.id ? s.headerAccent : "#555",
-              padding: "12px 14px 9px", fontSize: 14, whiteSpace: "nowrap",
-              fontFamily: "'Caveat', cursive", fontWeight: activeSpace === s.id ? 700 : 400,
-              marginBottom: -3, transition: "all 0.2s",
-            }}>
-              {s.emoji} {s.label}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ padding: "16px", maxWidth: 720, margin: "0 auto" }}>
-          {/* SEARCH */}
-          <input placeholder="🔍 Chercher un mémo…" value={search} onChange={e => setSearch(e.target.value)} style={{ width: "100%", background: "rgba(255,255,255,0.6)", border: "1px dashed rgba(0,0,0,0.2)", borderRadius: 6, color: "#2a2010", fontSize: 16, padding: "10px 14px", outline: "none", marginBottom: 12 }} />
-
-          {/* FILTERS */}
-          <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-            {FILTERS.map(f => (
-              <button key={f} onClick={() => setFilter(f)} style={{ background: filter === f ? space.headerBg : "rgba(255,255,255,0.5)", border: `1px dashed ${filter === f ? "transparent" : "rgba(0,0,0,0.15)"}`, color: filter === f ? space.headerAccent : "#888", borderRadius: 20, padding: "4px 12px", fontSize: 13, fontFamily: "'Caveat', cursive", fontWeight: filter === f ? 700 : 400, boxShadow: filter === f ? "0 2px 6px rgba(0,0,0,0.15)" : "none" }}>{f}</button>
+          {/* SPACE TABS */}
+          <div style={{ display: "flex", gap: 0, overflowX: "auto", scrollbarWidth: "none" }}>
+            {SPACES.map(s => (
+              <button key={s.id} onClick={() => { setActiveSpace(s.id); setFilter("tous"); }} style={{
+                background: "none", border: "none", padding: "10px 14px 12px",
+                borderBottom: activeSpace === s.id ? `2px solid ${s.accent}` : "2px solid transparent",
+                color: activeSpace === s.id ? s.accent : "#9ca3af",
+                fontSize: 13, fontWeight: activeSpace === s.id ? 700 : 500,
+                whiteSpace: "nowrap", fontFamily: "inherit",
+                transition: "all 0.15s",
+              }}>
+                {s.emoji} {s.id === "fds" ? "FdS" : s.label.split(" ")[0]}
+              </button>
             ))}
+          </div>
+        </div>
+
+        <div style={{ padding: "16px" }}>
+
+          {/* SEARCH */}
+          <div style={{ position: "relative", marginBottom: 12 }}>
+            <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9ca3af", fontSize: 16 }}>🔍</span>
+            <input placeholder="Rechercher…" value={search} onChange={e => setSearch(e.target.value)} style={{
+              width: "100%", border: "1.5px solid #e5e7eb", borderRadius: 12,
+              padding: "10px 12px 10px 36px", fontSize: 14, outline: "none",
+              color: "#374151", background: "#fff", fontFamily: "inherit",
+            }} />
           </div>
 
           {/* STATS */}
-          <div style={{ display: "flex", gap: 12, marginBottom: 20, fontSize: 13, color: "#aaa" }}>
-            <span>{spaceItems.filter(i => !i.done).length} actifs</span>
-            <span>·</span>
-            <span>{spaceItems.filter(i => i.done).length} terminés</span>
-            {spaceItems.filter(i => i.priority === "urgente" && !i.done).length > 0 && (
-              <><span>·</span><span style={{ color: "#d94f4f", fontWeight: 700 }}>⚠ {spaceItems.filter(i => i.priority === "urgente" && !i.done).length} urgent{spaceItems.filter(i => i.priority === "urgente" && !i.done).length > 1 ? "s" : ""}</span></>
-            )}
+          {urgentCount > 0 && (
+            <div style={{
+              background: "#fef2f2", border: "1px solid #fecaca",
+              borderRadius: 12, padding: "10px 14px", marginBottom: 12,
+              display: "flex", alignItems: "center", gap: 8,
+            }}>
+              <span style={{ fontSize: 16 }}>🔴</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#dc2626" }}>
+                {urgentCount} mémo{urgentCount > 1 ? "s" : ""} urgent{urgentCount > 1 ? "s" : ""}
+              </span>
+            </div>
+          )}
+
+          {/* FILTERS */}
+          <div style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", marginBottom: 16, paddingBottom: 2 }}>
+            {FILTERS.map(f => (
+              <button key={f.id} onClick={() => setFilter(f.id)} style={{
+                background: filter === f.id ? space.accent : "#fff",
+                border: `1.5px solid ${filter === f.id ? space.accent : "#e5e7eb"}`,
+                color: filter === f.id ? "#fff" : "#6b7280",
+                borderRadius: 20, padding: "6px 14px",
+                fontSize: 12, fontWeight: 600, whiteSpace: "nowrap",
+                fontFamily: "inherit", transition: "all 0.15s",
+              }}>{f.label}</button>
+            ))}
           </div>
 
-          {/* POST-ITS */}
+          {/* CARDS */}
           {!loaded ? (
-            <div style={{ textAlign: "center", color: "#bbb", padding: "60px 0", fontSize: 20 }}>Chargement…</div>
+            <div style={{ textAlign: "center", color: "#9ca3af", padding: "60px 0", fontSize: 14 }}>Chargement…</div>
           ) : filtered.length === 0 ? (
-            <div style={{ textAlign: "center", color: "#ccc", padding: "60px 0" }}>
-              <div style={{ fontSize: 48, marginBottom: 12, opacity: 0.3 }}>📋</div>
-              <div style={{ fontSize: 20 }}>Rien ici pour l'instant</div>
+            <div style={{ textAlign: "center", color: "#9ca3af", padding: "60px 0" }}>
+              <div style={{ fontSize: 40, marginBottom: 10 }}>✓</div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>Rien ici !</div>
             </div>
           ) : (
-            <div style={{ columns: "2 260px", columnGap: 16 }}>
-              {filtered.map((item, idx) => (
-                <div key={item.id} style={{ breakInside: "avoid", marginBottom: 16 }}>
-                  <PostIt item={item} space={space} colorIndex={idx}
-                    onDelete={deleteItem} onPin={pinItem} onToggleDone={toggleDone}
-                    onToggleListItem={toggleLI} onDeleteListItem={deleteLI} onAddListItem={addLI}
-                  />
-                </div>
-              ))}
+            filtered.map(item => (
+              <Card key={item.id} item={item} space={space}
+                onDelete={deleteItem} onPin={pinItem} onToggleDone={toggleDone}
+                onToggleListItem={toggleLI} onDeleteListItem={deleteLI} onAddListItem={addLI}
+              />
+            ))
+          )}
+
+          {/* Count */}
+          {loaded && (
+            <div style={{ textAlign: "center", marginTop: 16, fontSize: 12, color: "#d1d5db" }}>
+              {spaceItems.filter(i => !i.done).length} actif{spaceItems.filter(i => !i.done).length > 1 ? "s" : ""} · {spaceItems.filter(i => i.done).length} terminé{spaceItems.filter(i => i.done).length > 1 ? "s" : ""}
             </div>
           )}
         </div>
