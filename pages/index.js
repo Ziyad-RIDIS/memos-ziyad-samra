@@ -310,7 +310,6 @@ export default function Home() {
     if (!loaded) return;
     try { localStorage.setItem("memos-local", JSON.stringify(items)); } catch {}
     const t = setTimeout(async () => {
-      if (items.length === 0) return;
       setSyncing(true);
       await apiSet(items);
       setLastSync(new Date());
@@ -319,18 +318,7 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [items, loaded]);
 
-  useEffect(() => {
-    const iv = setInterval(async () => {
-      // Ne pas écraser si une mutation a eu lieu dans les 5 dernières secondes
-      if (Date.now() - lastMutationRef.current < 5000) return;
-      const data = await apiGet();
-      if (data && data.length > 0) { setItems(data); setLastSync(new Date()); }
-    }, 20000);
-    return () => clearInterval(iv);
-  }, []);
-
-  const lastMutationRef = React.useRef(0);
-  const mutate = useCallback(fn => { lastMutationRef.current = Date.now(); setItems(p => fn(p)); }, []);
+  const mutate = useCallback(fn => { setItems(p => fn(p)); }, []);
   const addItem = item => mutate(p => [{ ...item, spaceId: activeSpace }, ...p]);
   const deleteItem = id => mutate(p => p.filter(i => i.id !== id));
   const pinItem = id => mutate(p => p.map(i => i.id === id ? { ...i, pinned: !i.pinned } : i));
@@ -377,9 +365,19 @@ export default function Home() {
               {syncing ? "⟳ sync…" : lastSync ? `✓ ${lastSync.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : "local"}
             </div>
           </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button onClick={async () => {
+            setSyncing(true);
+            const data = await apiGet();
+            if (data && data.length > 0) { setItems(data); setLastSync(new Date()); }
+            setSyncing(false);
+          }} style={{ background: "transparent", border: `1px solid ${space.headerAccent}44`, color: space.headerAccent, borderRadius: 6, padding: "9px 12px", fontSize: 16, fontFamily: "'Caveat', cursive", fontWeight: 700 }}>
+            ↻
+          </button>
           <button onClick={() => setShowAdd(true)} style={{ background: space.headerAccent, border: "none", color: space.headerBg, borderRadius: 6, padding: "9px 18px", fontSize: 17, fontFamily: "'Caveat', cursive", fontWeight: 700, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>
             + Coller
           </button>
+        </div>
         </div>
 
         {/* TABS */}
