@@ -195,7 +195,7 @@ function AddModal({ space, onAdd, onClose }) {
   const iStyle = { width: "100%", border: "1.5px solid #e5e7eb", borderRadius: 12, padding: "12px 14px", fontSize: 15, outline: "none", color: "#111827", background: "#f9fafb", fontFamily: "inherit", boxSizing: "border-box" };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(4px)" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(4px)" }}>
       <div onClick={e => e.stopPropagation()} style={{
         background: "#fff", borderRadius: "24px 24px 0 0",
         padding: "16px 20px 40px", width: "100%", maxWidth: 500,
