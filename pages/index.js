@@ -180,10 +180,16 @@ function AddModal({ space, onAdd, onClose }) {
 
   const addLI = () => { if (!newLI.trim()) return; setListItems(p => [...p, { id: uid(), text: newLI.trim(), done: false }]); setNewLI(""); };
 
+  const [addedCount, setAddedCount] = useState(0);
+
   const submit = () => {
     if (!title.trim()) return;
     onAdd({ id: uid(), type, title: title.trim(), body: body.trim(), items: type === "list" ? listItems : [], priority, category, assignedTo, dueDate, waiting, date: new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }), done: false, pinned: false, spaceId: space.id, createdAt: Date.now() });
-    onClose();
+    setTitle("");
+    setBody("");
+    setListItems([]);
+    setAddedCount(c => c + 1);
+    setTimeout(() => titleRef.current?.focus(), 50);
   };
 
   const iStyle = { width: "100%", border: "1.5px solid #e5e7eb", borderRadius: 12, padding: "12px 14px", fontSize: 15, outline: "none", color: "#111827", background: "#f9fafb", fontFamily: "inherit", boxSizing: "border-box" };
@@ -304,15 +310,23 @@ function AddModal({ space, onAdd, onClose }) {
           </div>
         )}
 
-        {/* Submit */}
-        <button onClick={submit} style={{
-          width: "100%", padding: "14px", background: title.trim() ? space.accent : "#e5e7eb",
-          border: "none", borderRadius: 14, color: title.trim() ? "#fff" : "#9ca3af",
-          fontSize: 16, fontWeight: 700, fontFamily: "inherit", marginTop: 12,
-          transition: "all 0.15s",
-        }}>
-          Ajouter ✓
-        </button>
+        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: "14px", background: "#f3f4f6",
+            border: "none", borderRadius: 14, color: "#6b7280",
+            fontSize: 15, fontWeight: 600, fontFamily: "inherit",
+          }}>
+            Fermer {addedCount > 0 ? `(${addedCount} ajouté${addedCount > 1 ? "s" : ""})` : ""}
+          </button>
+          <button onClick={submit} style={{
+            flex: 2, padding: "14px", background: title.trim() ? space.accent : "#e5e7eb",
+            border: "none", borderRadius: 14, color: title.trim() ? "#fff" : "#9ca3af",
+            fontSize: 16, fontWeight: 700, fontFamily: "inherit",
+            transition: "all 0.15s",
+          }}>
+            Ajouter ✓
+          </button>
+        </div>
       </div>
     </div>
   );
