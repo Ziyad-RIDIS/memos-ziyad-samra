@@ -31,6 +31,126 @@ const WHO_COLORS = { Ziyad: "#3b82f6", Samra: "#e8637a", "Tous les deux": "#0596
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
+// ── Ajout de produits en masse ──────────────────────────────────────────────
+// Clé de comparaison : minuscules, sans accents, espaces normalisés
+const normKey = s => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
+
+// Transforme un texte multi-lignes en [{ text, qty }]
+// - 1 ligne = 1 produit, lignes vides ignorées
+// - quantités reconnues : "x2", "x 2", "×2", "(x2)", "2x ", "2 x "
+// - puces / numérotation retirées : "- ", "• ", "1. ", "1) ", "[ ] "
+// - doublons regroupés (quantités additionnées)
+function parseShoppingText(text) {
+  const found = new Map();
+  String(text || "").split(/\r\n|\r|\n|\u2028|\u2029/).forEach(raw => {
+    let line = raw.trim();
+    if (!line) return;
+    line = line.replace(/^(?:[-–—*•·▪◦●○▫☐☑✓✔]+\s*|\[[ xX]?\]\s*|\d+[.)]\s+)/, "").trim();
+    if (!line) return;
+
+    let name = line;
+    let qty = 1;
+    const trailing = line.match(/^(.*?)(?:\s+[xX]|\s*[(\[]\s*[xX]|\s*×)\s*(\d+)\s*[)\]]?\s*$/);
+    const leading = line.match(/^(\d+)\s*(?:[xX]\s+|×\s*)(.+)$/);
+    if (trailing && trailing[1].trim()) {
+      name = trailing[1];
+      qty = parseInt(trailing[2], 10);
+    } else if (leading) {
+      qty = parseInt(leading[1], 10);
+      name = leading[2];
+    }
+    name = name.replace(/^[\s,;:\-–]+|[\s,;:\-–]+$/g, "").trim();
+    if (!name) return;
+    qty = Math.max(1, qty || 1);
+
+    const key = normKey(name);
+    if (found.has(key)) found.get(key).qty += qty;
+    else found.set(key, { text: name, qty });
+  });
+  return [...found.values()];
+}
+
+// Fusionne des produits parsés dans une liste existante (sans doublons)
+function mergeItems(existing, parsed) {
+  const items = [...existing];
+  const index = new Map(items.map((it, i) => [normKey(it.text), i]));
+  parsed.forEach(({ text, qty }) => {
+    const key = normKey(text);
+    if (index.has(key)) {
+      const i = index.get(key);
+      const cur = items[i];
+      // déjà coché → on le remet à acheter avec la nouvelle quantité
+      items[i] = cur.done ? { ...cur, done: false, qty } : { ...cur, qty: (cur.qty || 1) + qty };
+    } else {
+      index.set(key, items.length);
+      items.push({ id: uid(), text, qty, done: false });
+    }
+  });
+  return items;
+}
+
+function QtyBadge({ qty, color }) {
+  if (!qty || qty < 2) return null;
+  return (
+    <span style={{ fontSize: 12, fontWeight: 700, color, background: color + "18", borderRadius: 20, padding: "1px 8px", flexShrink: 0 }}>×{qty}</span>
+  );
+}
+
+// Champ d'ajout : Entrée = ajouter, coller plusieurs lignes = tout ajouter d'un coup
+function ListAdder({ value, onChange, onSubmit, fieldStyle, btnStyle, placeholder }) {
+  const ref = useRef();
+  const [flash, setFlash] = useState("");
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+  }, [value]);
+
+  useEffect(() => {
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(""), 2500);
+    return () => clearTimeout(t);
+  }, [flash]);
+
+  const submit = raw => {
+    const n = parseShoppingText(raw).length;
+    if (n === 0) return;
+    onSubmit(raw);
+    onChange("");
+    if (n > 1) setFlash(`✓ ${n} produits ajoutés`);
+  };
+
+  const handlePaste = e => {
+    const pasted = (e.clipboardData || window.clipboardData)?.getData("text") || "";
+    if (!/[\r\n]/.test(pasted)) return; // une seule ligne : collage normal
+    e.preventDefault();
+    const el = e.target;
+    const start = el.selectionStart ?? value.length;
+    const end = el.selectionEnd ?? value.length;
+    submit(value.slice(0, start) + pasted + value.slice(end));
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <textarea ref={ref} rows={1} value={value}
+          onChange={e => onChange(e.target.value)}
+          onPaste={handlePaste}
+          onKeyDown={e => {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(value); }
+          }}
+          placeholder={placeholder}
+          style={{ ...fieldStyle, resize: "none", overflowY: "auto", lineHeight: 1.4, fontFamily: "inherit" }}
+        />
+        <button onClick={() => submit(value)} style={btnStyle}>+</button>
+      </div>
+      {flash && <div style={{ marginTop: 6, fontSize: 12, fontWeight: 600, color: "#059669" }}>{flash}</div>}
+    </div>
+  );
+}
+
 async function apiGet() {
   try {
     const r = await fetch("/api/memos");
@@ -141,17 +261,18 @@ function Card({ item, space, pb, onDelete, onToggleDone, onToggleListItem, onDel
                     {li.done && <span style={{ color: "#fff", fontSize: 11 }}>✓</span>}
                   </button>
                   <span style={{ flex: 1, fontSize: 14, color: li.done ? "#9ca3af" : "#374151", textDecoration: li.done ? "line-through" : "none" }}>{li.text}</span>
+                  <QtyBadge qty={li.qty} color={li.done ? "#9ca3af" : pb.color} />
                   <button onClick={() => onDeleteListItem(item.id, li.id)} style={{ background: "none", border: "none", color: "#d1d5db", fontSize: 16 }}>×</button>
                 </div>
               ))}
-              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                <input value={newLI} onChange={e => setNewLI(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && newLI.trim()) { onAddListItem(item.id, newLI.trim()); setNewLI(""); } }}
-                  placeholder="Ajouter un item…"
-                  style={{ flex: 1, border: "1.5px solid #e5e7eb", borderRadius: 10, padding: "8px 12px", fontSize: 14, outline: "none", color: "#374151", background: "#f9fafb" }}
+              <div style={{ marginTop: 10 }}>
+                <ListAdder
+                  value={newLI} onChange={setNewLI}
+                  onSubmit={text => onAddListItem(item.id, text)}
+                  placeholder="Ajouter ou coller une liste…"
+                  fieldStyle={{ flex: 1, minWidth: 0, border: "1.5px solid #e5e7eb", borderRadius: 10, padding: "8px 12px", fontSize: 14, outline: "none", color: "#374151", background: "#f9fafb" }}
+                  btnStyle={{ background: pb.color, border: "none", color: "#fff", borderRadius: 10, padding: "8px 14px", fontSize: 18, fontWeight: 700 }}
                 />
-                <button onClick={() => { if (newLI.trim()) { onAddListItem(item.id, newLI.trim()); setNewLI(""); } }}
-                  style={{ background: pb.color, border: "none", color: "#fff", borderRadius: 10, padding: "8px 14px", fontSize: 18, fontWeight: 700 }}>+</button>
               </div>
             </div>
           )}
@@ -178,16 +299,19 @@ function AddModal({ space, onAdd, onClose }) {
 
   useEffect(() => { setTimeout(() => titleRef.current?.focus(), 100); }, []);
 
-  const addLI = () => { if (!newLI.trim()) return; setListItems(p => [...p, { id: uid(), text: newLI.trim(), done: false }]); setNewLI(""); };
+  const addLI = text => setListItems(p => mergeItems(p, parseShoppingText(text)));
 
   const [addedCount, setAddedCount] = useState(0);
 
   const submit = () => {
     if (!title.trim()) return;
-    onAdd({ id: uid(), type, title: title.trim(), body: body.trim(), items: type === "list" ? listItems : [], priority, category, assignedTo, dueDate, waiting, date: new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }), done: false, pinned: false, spaceId: space.id, createdAt: Date.now() });
+    // si du texte est resté dans le champ produit sans avoir été validé, on l'inclut
+    const finalItems = type === "list" ? mergeItems(listItems, parseShoppingText(newLI)) : [];
+    onAdd({ id: uid(), type, title: title.trim(), body: body.trim(), items: finalItems, priority, category, assignedTo, dueDate, waiting, date: new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }), done: false, pinned: false, spaceId: space.id, createdAt: Date.now() });
     setTitle("");
     setBody("");
     setListItems([]);
+    setNewLI("");
     setAddedCount(c => c + 1);
     setTimeout(() => titleRef.current?.focus(), 50);
   };
@@ -237,14 +361,18 @@ function AddModal({ space, onAdd, onClose }) {
               <div key={li.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f3f4f6" }}>
                 <div style={{ width: 6, height: 6, borderRadius: "50%", background: space.accent, flexShrink: 0 }} />
                 <span style={{ flex: 1, fontSize: 14, color: "#374151" }}>{li.text}</span>
+                <QtyBadge qty={li.qty} color={space.accent} />
                 <button onClick={() => setListItems(p => p.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: "#d1d5db", fontSize: 16 }}>×</button>
               </div>
             ))}
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <input value={newLI} onChange={e => setNewLI(e.target.value)} onKeyDown={e => e.key === "Enter" && addLI()}
-                placeholder="Ajouter… (Entrée)"
-                style={{ ...iStyle, flex: 1, fontSize: 14 }} />
-              <button onClick={addLI} style={{ background: space.accent, border: "none", color: "#fff", borderRadius: 12, padding: "0 16px", fontSize: 20 }}>+</button>
+            <div style={{ marginTop: 8 }}>
+              <ListAdder
+                value={newLI} onChange={setNewLI}
+                onSubmit={addLI}
+                placeholder="Ajouter ou coller une liste…"
+                fieldStyle={{ ...iStyle, flex: 1, minWidth: 0, fontSize: 14 }}
+                btnStyle={{ background: space.accent, border: "none", color: "#fff", borderRadius: 12, padding: "0 16px", fontSize: 20 }}
+              />
             </div>
           </div>
         )}
@@ -375,7 +503,7 @@ export default function Home() {
   const toggleDone = id => mutate(p => p.map(i => i.id === id ? { ...i, done: !i.done } : i));
   const toggleLI = (iid, lid) => mutate(p => p.map(i => i.id === iid ? { ...i, items: i.items.map(li => li.id === lid ? { ...li, done: !li.done } : li) } : i));
   const deleteLI = (iid, lid) => mutate(p => p.map(i => i.id === iid ? { ...i, items: i.items.filter(li => li.id !== lid) } : i));
-  const addLI = (iid, text) => mutate(p => p.map(i => i.id === iid ? { ...i, items: [...(i.items || []), { id: uid(), text, done: false }] } : i));
+  const addLI = (iid, text) => mutate(p => p.map(i => i.id === iid ? { ...i, items: mergeItems(i.items || [], parseShoppingText(text)) } : i));
   const changePriority = (id, newP) => mutate(p => p.map(i => i.id === id ? { ...i, priority: newP } : i));
 
   const spaceItems = items.filter(i => i.spaceId === activeSpace && !i.done);
