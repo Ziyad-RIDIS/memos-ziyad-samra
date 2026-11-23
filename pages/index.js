@@ -515,17 +515,57 @@ export default function Home() {
     })();
   }, []);
 
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const modalRef = useRef(false);
+  modalRef.current = !!(showAdd || editing);
+  const skipRef = useRef(false);   // la prochaine modif vient du serveur : ne pas la renvoyer
+  const dirtyRef = useRef(false);  // modifs locales pas encore envoyées
+  const busyRef = useRef(false);   // envoi en cours
+  const verRef = useRef(0);
+
   useEffect(() => {
     if (!loaded) return;
     try { localStorage.setItem("memos-local", JSON.stringify(items)); } catch {}
+    if (skipRef.current) { skipRef.current = false; return; }
+    dirtyRef.current = true;
+    const ver = ++verRef.current;
     const t = setTimeout(async () => {
+      busyRef.current = true;
       setSyncing(true);
       await apiSet(items);
+      busyRef.current = false;
+      if (verRef.current === ver) dirtyRef.current = false;
       setLastSync(new Date());
       setSyncing(false);
     }, 1500);
     return () => clearTimeout(t);
   }, [items, loaded]);
+
+  // Mise à jour automatique : au retour sur l'appli, puis toutes les 20 s
+  const pull = useCallback(async () => {
+    const blocked = () => dirtyRef.current || busyRef.current || modalRef.current;
+    if (blocked()) return;
+    const data = await apiGet();
+    if (!data || data.length === 0 || blocked()) return;
+    if (JSON.stringify(data) === JSON.stringify(itemsRef.current)) return;
+    skipRef.current = true;
+    setItems(data);
+    setLastSync(new Date());
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    const onVisible = () => { if (document.visibilityState === "visible") pull(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    const id = setInterval(() => { if (document.visibilityState === "visible") pull(); }, 20000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+      clearInterval(id);
+    };
+  }, [loaded, pull]);
 
   const mutate = useCallback(fn => setItems(p => fn(p)), []);
   const addItem = item => mutate(p => [{ ...item, spaceId: activeSpace }, ...p]);
