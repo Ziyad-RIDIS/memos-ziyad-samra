@@ -178,7 +178,7 @@ function Badge({ children, color }) {
   );
 }
 
-function Card({ item, space, pb, onDelete, onToggleDone, onToggleListItem, onDeleteListItem, onAddListItem, onChangePriority }) {
+function Card({ item, space, pb, onDelete, onToggleDone, onToggleListItem, onDeleteListItem, onAddListItem, onChangePriority, onEdit }) {
   const [open, setOpen] = useState(false);
   const [newLI, setNewLI] = useState("");
   const doneCount = item.type === "list" ? (item.items || []).filter(i => i.done).length : 0;
@@ -276,28 +276,55 @@ function Card({ item, space, pb, onDelete, onToggleDone, onToggleListItem, onDel
               </div>
             </div>
           )}
-          {item.category && <div style={{ marginTop: 8, fontSize: 11, color: "#d1d5db" }}>{item.category} · {item.date}</div>}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 12 }}>
+            <div style={{ fontSize: 11, color: "#d1d5db" }}>{item.category ? `${item.category} · ${item.date}` : ""}</div>
+            <button onClick={() => onEdit(item)} style={{
+              background: pb.color + "14", border: "none", color: pb.color, borderRadius: 10,
+              padding: "8px 14px", fontSize: 13, fontWeight: 700, fontFamily: "inherit",
+            }}>✏️ Modifier</button>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function AddModal({ space, onAdd, onClose }) {
-  const [type, setType] = useState("memo");
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [priority, setPriority] = useState("normale");
-  const [category, setCategory] = useState(space.cats[0]);
-  const [assignedTo, setAssignedTo] = useState("Ziyad");
-  const [dueDate, setDueDate] = useState("");
-  const [waiting, setWaiting] = useState(false);
-  const [listItems, setListItems] = useState([]);
+function EditableRow({ li, color, onChange, onDelete }) {
+  const label = li => (li.qty >= 2 ? `${li.text} x${li.qty}` : li.text);
+  const [v, setV] = useState(label(li));
+  const commit = () => {
+    const p = parseShoppingText(v)[0];
+    if (!p) { setV(label(li)); return; }
+    onChange({ ...li, text: p.text, qty: p.qty });
+    setV(p.qty >= 2 ? `${p.text} x${p.qty}` : p.text);
+  };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", borderBottom: "1px solid #f3f4f6" }}>
+      <div style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0 }} />
+      <input value={v} onChange={e => setV(e.target.value)} onBlur={commit}
+        onKeyDown={e => { if (e.key === "Enter") e.target.blur(); }}
+        style={{ flex: 1, minWidth: 0, border: "none", outline: "none", fontSize: 14, color: "#374151", background: "transparent", padding: "6px 0", fontFamily: "inherit" }} />
+      <button onClick={onDelete} style={{ background: "none", border: "none", color: "#d1d5db", fontSize: 16 }}>×</button>
+    </div>
+  );
+}
+
+function AddModal({ space, onAdd, onClose, initial, onSave }) {
+  const isEdit = !!initial;
+  const [type, setType] = useState(initial?.type || "memo");
+  const [title, setTitle] = useState(initial?.title || "");
+  const [body, setBody] = useState(initial?.body || "");
+  const [priority, setPriority] = useState(initial?.priority || "normale");
+  const [category, setCategory] = useState(initial?.category || space.cats[0]);
+  const [assignedTo, setAssignedTo] = useState(initial?.assignedTo || "Ziyad");
+  const [dueDate, setDueDate] = useState(initial?.dueDate || "");
+  const [waiting, setWaiting] = useState(!!initial?.waiting);
+  const [listItems, setListItems] = useState(initial?.items || []);
   const [newLI, setNewLI] = useState("");
-  const [showMore, setShowMore] = useState(false);
+  const [showMore, setShowMore] = useState(isEdit);
   const titleRef = useRef();
 
-  useEffect(() => { setTimeout(() => titleRef.current?.focus(), 100); }, []);
+  useEffect(() => { if (!isEdit) setTimeout(() => titleRef.current?.focus(), 100); }, []);
 
   const addLI = text => setListItems(p => mergeItems(p, parseShoppingText(text)));
 
@@ -305,6 +332,11 @@ function AddModal({ space, onAdd, onClose }) {
 
   const submit = () => {
     if (!title.trim()) return;
+    if (isEdit) {
+      const finalItems = type === "list" ? mergeItems(listItems, parseShoppingText(newLI)) : [];
+      onSave({ ...initial, title: title.trim(), body: body.trim(), items: finalItems, priority, category, assignedTo, dueDate, waiting });
+      return;
+    }
     // si du texte est resté dans le champ produit sans avoir été validé, on l'inclut
     const finalItems = type === "list" ? mergeItems(listItems, parseShoppingText(newLI)) : [];
     onAdd({ id: uid(), type, title: title.trim(), body: body.trim(), items: finalItems, priority, category, assignedTo, dueDate, waiting, date: new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }), done: false, pinned: false, spaceId: space.id, createdAt: Date.now() });
@@ -328,12 +360,12 @@ function AddModal({ space, onAdd, onClose }) {
         <div style={{ width: 36, height: 4, background: "#e5e7eb", borderRadius: 2, margin: "0 auto 16px" }} />
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-          <h3 style={{ fontSize: 17, fontWeight: 700, color: "#111827" }}>{space.emoji} Nouveau</h3>
+          <h3 style={{ fontSize: 17, fontWeight: 700, color: "#111827" }}>{space.emoji} {isEdit ? "✏️ Modifier" : "Nouveau"}</h3>
           <button onClick={onClose} style={{ background: "#f3f4f6", border: "none", borderRadius: "50%", width: 30, height: 30, fontSize: 16, color: "#6b7280" }}>×</button>
         </div>
 
         {/* Type toggle */}
-        <div style={{ display: "flex", gap: 6, marginBottom: 14, background: "#f3f4f6", borderRadius: 12, padding: 4 }}>
+        {!isEdit && <div style={{ display: "flex", gap: 6, marginBottom: 14, background: "#f3f4f6", borderRadius: 12, padding: 4 }}>
           {["memo", "list"].map(t => (
             <button key={t} onClick={() => setType(t)} style={{
               flex: 1, padding: "8px", background: type === t ? "#fff" : "transparent",
@@ -344,7 +376,7 @@ function AddModal({ space, onAdd, onClose }) {
               {t === "memo" ? "📝 Mémo" : "☑ Liste"}
             </button>
           ))}
-        </div>
+        </div>}
 
         {/* Title — always visible */}
         <input ref={titleRef}
@@ -357,13 +389,10 @@ function AddModal({ space, onAdd, onClose }) {
         {/* List items */}
         {type === "list" && (
           <div style={{ marginBottom: 10 }}>
-            {listItems.map((li, i) => (
-              <div key={li.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f3f4f6" }}>
-                <div style={{ width: 6, height: 6, borderRadius: "50%", background: space.accent, flexShrink: 0 }} />
-                <span style={{ flex: 1, fontSize: 14, color: "#374151" }}>{li.text}</span>
-                <QtyBadge qty={li.qty} color={space.accent} />
-                <button onClick={() => setListItems(p => p.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: "#d1d5db", fontSize: 16 }}>×</button>
-              </div>
+            {listItems.map(li => (
+              <EditableRow key={li.id + ":" + li.text + ":" + li.qty} li={li} color={space.accent}
+                onChange={n => setListItems(p => p.map(x => x.id === n.id ? n : x))}
+                onDelete={() => setListItems(p => p.filter(x => x.id !== li.id))} />
             ))}
             <div style={{ marginTop: 8 }}>
               <ListAdder
@@ -416,7 +445,7 @@ function AddModal({ space, onAdd, onClose }) {
               <div key={label}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</div>
                 <select value={val} onChange={e => set(e.target.value)} style={{ ...iStyle, fontSize: 13 }}>
-                  {opts.map(o => <option key={o} value={o}>{o}</option>)}
+                  {(opts.includes(val) ? opts : [val, ...opts]).map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
             ))}
@@ -444,7 +473,7 @@ function AddModal({ space, onAdd, onClose }) {
             border: "none", borderRadius: 14, color: "#6b7280",
             fontSize: 15, fontWeight: 600, fontFamily: "inherit",
           }}>
-            Fermer {addedCount > 0 ? `(${addedCount} ajouté${addedCount > 1 ? "s" : ""})` : ""}
+            {isEdit ? "Annuler" : `Fermer ${addedCount > 0 ? `(${addedCount} ajouté${addedCount > 1 ? "s" : ""})` : ""}`}
           </button>
           <button onClick={submit} style={{
             flex: 2, padding: "14px", background: title.trim() ? space.accent : "#e5e7eb",
@@ -452,7 +481,7 @@ function AddModal({ space, onAdd, onClose }) {
             fontSize: 16, fontWeight: 700, fontFamily: "inherit",
             transition: "all 0.15s",
           }}>
-            Ajouter ✓
+            {isEdit ? "Enregistrer ✓" : "Ajouter ✓"}
           </button>
         </div>
       </div>
@@ -464,6 +493,7 @@ export default function Home() {
   const [items, setItems] = useState([]);
   const [activeSpace, setActiveSpace] = useState("conforama");
   const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -592,7 +622,7 @@ export default function Home() {
                       <Card key={item.id} item={item} space={space} pb={pb}
                         onDelete={deleteItem} onToggleDone={toggleDone}
                         onToggleListItem={toggleLI} onDeleteListItem={deleteLI}
-                        onAddListItem={addLI} onChangePriority={changePriority}
+                        onAddListItem={addLI} onChangePriority={changePriority} onEdit={setEditing}
                       />
                     ))}
                   </div>
@@ -613,7 +643,7 @@ export default function Home() {
                     <Card key={item.id} item={item} space={space} pb={PRIORITY_BLOCKS[2]}
                       onDelete={deleteItem} onToggleDone={toggleDone}
                       onToggleListItem={toggleLI} onDeleteListItem={deleteLI}
-                      onAddListItem={addLI} onChangePriority={changePriority}
+                      onAddListItem={addLI} onChangePriority={changePriority} onEdit={setEditing}
                     />
                   ))}
                 </div>
@@ -630,6 +660,9 @@ export default function Home() {
           )}
         </div>
 
+        {editing && <AddModal key={editing.id} space={SPACES.find(s => s.id === editing.spaceId) || space} initial={editing}
+          onSave={u => { mutate(p => p.map(i => i.id === u.id ? u : i)); setEditing(null); }}
+          onClose={() => setEditing(null)} />}
         {showAdd && <AddModal space={space} onAdd={addItem} onClose={() => setShowAdd(false)} />}
       </div>
     </>
