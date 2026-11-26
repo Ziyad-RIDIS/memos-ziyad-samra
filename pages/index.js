@@ -161,16 +161,37 @@ async function apiGet() {
   } catch { return null; }
 }
 
-async function apiSet(data, keepalive = false) {
+/**
+ * Envoie uniquement ce qui a changé sur cet appareil depuis la dernière version reçue du
+ * serveur (`base`). Le serveur fusionne avec les changements des autres appareils et
+ * renvoie la liste complète à jour. Renvoie null en cas d'échec.
+ */
+function diffChanges(base, items) {
+  const baseById = new Map(base.map(i => [i.id, i]));
+  const ids = new Set(items.map(i => i.id));
+  const upserts = [];
+  for (const item of items) {
+    const b = baseById.get(item.id);
+    if (!b || JSON.stringify(b) !== JSON.stringify(item)) upserts.push({ item, base: b || null });
+  }
+  const deletes = base.filter(b => !ids.has(b.id)).map(b => b.id);
+  return { upserts, deletes };
+}
+
+async function apiSync(base, items, keepalive = false) {
+  const changes = diffChanges(base, items);
+  if (changes.upserts.length === 0 && changes.deletes.length === 0) return { ok: true, items: null };
   try {
     const r = await fetch("/api/memos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      body: JSON.stringify(changes),
       keepalive,
     });
-    return r.ok;
-  } catch { return false; }
+    if (!r.ok) return null;
+    const d = await r.json();
+    return { ok: true, items: Array.isArray(d.items) ? d.items : null };
+  } catch { return null; }
 }
 
 function Badge({ children, color }) {
@@ -526,30 +547,6 @@ export default function Home() {
 
   const space = SPACES.find(s => s.id === activeSpace);
 
-  useEffect(() => {
-    (async () => {
-      setSyncing(true);
-      let local = [];
-      try { local = JSON.parse(localStorage.getItem("memos-local") || "[]"); if (!Array.isArray(local)) local = []; } catch {}
-      const data = await apiGet();
-      let wasDirty = false;
-      try { wasDirty = localStorage.getItem("memos-dirty") === "1"; } catch {}
-      if (wasDirty && local.length > 0) {
-        // des ajouts faits sur cet appareil n'avaient pas été envoyés : on les fusionne au lieu de les perdre
-        const byId = new Map(local.map(i => [i.id, i]));
-        const merged = [...local, ...(data || []).filter(i => !byId.has(i.id))];
-        setItems(merged);
-        const ok = await apiSet(merged);
-        if (ok) { try { localStorage.removeItem("memos-dirty"); } catch {} }
-        setLastSync(new Date());
-      }
-      else if (data && data.length > 0) { setItems(data); setLastSync(new Date()); }
-      else if (local.length > 0) { setItems(local); await apiSet(local); setLastSync(new Date()); }
-      setSyncing(false);
-      setLoaded(true);
-    })();
-  }, []);
-
   const itemsRef = useRef(items);
   itemsRef.current = items;
   const modalRef = useRef(false);
@@ -558,6 +555,47 @@ export default function Home() {
   const dirtyRef = useRef(false);  // modifs locales pas encore envoyées
   const busyRef = useRef(false);   // envoi en cours
   const verRef = useRef(0);
+  // Dernière version reçue du serveur, sur laquelle sont basées les modifs locales.
+  // Sert à n'envoyer QUE ce qui a changé ici, pour ne jamais écraser les ajouts d'un autre appareil.
+  const baseRef = useRef([]);
+  const setBase = b => { baseRef.current = b; try { localStorage.setItem("memos-base", JSON.stringify(b)); } catch {} };
+  // Adopte la version du serveur comme état local (sans la renvoyer)
+  const adopt = data => { skipRef.current = true; setBase(data); setItems(data); };
+
+  useEffect(() => {
+    (async () => {
+      setSyncing(true);
+      let local = [], base = [], wasDirty = false;
+      try { local = JSON.parse(localStorage.getItem("memos-local") || "[]"); if (!Array.isArray(local)) local = []; } catch {}
+      try { base = JSON.parse(localStorage.getItem("memos-base") || "[]"); if (!Array.isArray(base)) base = []; } catch {}
+      try { wasDirty = localStorage.getItem("memos-dirty") === "1"; } catch {}
+      if (wasDirty && local.length > 0) {
+        // Des modifs faites ici n'avaient pas été envoyées : on n'envoie que celles-ci, fusionnées côté serveur.
+        // (Sans version de base connue, on n'envoie que les ajouts, pour ne rien écraser.)
+        let syncBase = base;
+        if (!syncBase.length) {
+          const server = (await apiGet()) || [];
+          const serverIds = new Set(server.map(i => i.id));
+          syncBase = local.filter(i => serverIds.has(i.id)); // => seuls les mémos absents du serveur sont envoyés
+        }
+        const res = await apiSync(syncBase, local);
+        if (res && res.items) { adopt(res.items); try { localStorage.removeItem("memos-dirty"); } catch {} }
+        else { setBase(syncBase); setItems(local); } // échec réseau : on garde les modifs locales, elles seront renvoyées automatiquement
+        setLastSync(new Date());
+      } else {
+        const data = await apiGet();
+        if (data && data.length > 0) { adopt(data); setLastSync(new Date()); }
+        else if (data && local.length > 0) {
+          // Serveur vide mais mémos sur cet appareil : on les renvoie
+          const res = await apiSync([], local);
+          if (res && res.items) adopt(res.items); else { skipRef.current = true; setItems(local); }
+          setLastSync(new Date());
+        } else if (!data && local.length > 0) { skipRef.current = true; setItems(local); }
+      }
+      setSyncing(false);
+      setLoaded(true);
+    })();
+  }, []);
 
   useEffect(() => {
     if (!loaded) return;
@@ -569,11 +607,14 @@ export default function Home() {
     const t = setTimeout(async () => {
       busyRef.current = true;
       setSyncing(true);
-      const ok = await apiSet(items);
+      const res = await apiSync(baseRef.current, items);
       busyRef.current = false;
-      if (ok && verRef.current === ver) {
+      if (res && verRef.current === ver) {
+        // Aucune autre modif locale entre-temps : on adopte la version fusionnée du serveur
+        // (qui contient aussi les ajouts des autres appareils).
         dirtyRef.current = false;
         try { localStorage.removeItem("memos-dirty"); } catch {}
+        if (res.items) adopt(res.items);
       }
       setLastSync(new Date());
       setSyncing(false);
@@ -586,10 +627,9 @@ export default function Home() {
     const blocked = () => dirtyRef.current || busyRef.current || modalRef.current;
     if (blocked()) return;
     const data = await apiGet();
-    if (!data || data.length === 0 || blocked()) return;
-    if (JSON.stringify(data) === JSON.stringify(itemsRef.current)) return;
-    skipRef.current = true;
-    setItems(data);
+    if (!data || blocked()) return;
+    if (JSON.stringify(data) === JSON.stringify(itemsRef.current)) { setBase(data); return; }
+    adopt(data);
     setLastSync(new Date());
   }, []);
 
@@ -597,9 +637,12 @@ export default function Home() {
     if (!loaded) return;
     // en quittant l'appli (verrouillage, changement d'app) : envoi immédiat des modifs en attente
     const flush = () => {
-      if (dirtyRef.current && itemsRef.current.length > 0) {
-        apiSet(itemsRef.current, true).then(ok => {
-          if (ok) { dirtyRef.current = false; try { localStorage.removeItem("memos-dirty"); } catch {} }
+      if (dirtyRef.current && !busyRef.current) {
+        apiSync(baseRef.current, itemsRef.current, true).then(res => {
+          if (res) {
+            dirtyRef.current = false; // la prochaine mise à jour récupérera la version fusionnée
+            try { localStorage.removeItem("memos-dirty"); } catch {}
+          }
         });
       }
     };
