@@ -82,6 +82,25 @@ function applyChanges(current, { upserts = [], deletes = [] }) {
   return [...added, ...out];
 }
 
+/** Ajoute ce qui manque (mémos et articles de listes), sans rien retirer ni modifier. */
+function unionMerge(current, incoming) {
+  const out = current.map(i => ({ ...i }));
+  const added = [];
+  for (const item of incoming) {
+    if (!item || !item.id) continue;
+    const cur = out.find(i => i.id === item.id);
+    if (!cur) { added.push(item); continue; }
+    for (const [k, v] of Object.entries(item)) {
+      if (Array.isArray(v) && Array.isArray(cur[k]) && v.every(x => x && typeof x === "object" && "id" in x)) {
+        const have = new Set(cur[k].map(x => x.id));
+        const extra = v.filter(x => !have.has(x.id));
+        if (extra.length) cur[k] = [...cur[k], ...extra];
+      }
+    }
+  }
+  return [...added, ...out];
+}
+
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
 
@@ -99,8 +118,9 @@ export default async function handler(req, res) {
       let next;
       if (Array.isArray(body)) {
         // Ancienne version de l'appli encore ouverte (avant rechargement) : elle envoie toute
-        // sa liste, peut-être périmée. On n'en garde que les nouveaux mémos, pour ne rien écraser.
-        next = applyChanges(current, { upserts: body.filter(i => i && i.id && !current.some(c => c.id === i.id)).map(item => ({ item, base: null })) });
+        // sa liste, peut-être périmée. On ne fait qu'AJOUTER : nouveaux mémos et nouveaux
+        // articles dans les listes existantes. Rien n'est jamais retiré ni écrasé.
+        next = unionMerge(current, body);
       } else {
         next = applyChanges(current, body || {});
       }
