@@ -161,14 +161,16 @@ async function apiGet() {
   } catch { return null; }
 }
 
-async function apiSet(data) {
+async function apiSet(data, keepalive = false) {
   try {
-    await fetch("/api/memos", {
+    const r = await fetch("/api/memos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
+      keepalive,
     });
-  } catch {}
+    return r.ok;
+  } catch { return false; }
 }
 
 function Badge({ children, color }) {
@@ -530,7 +532,18 @@ export default function Home() {
       let local = [];
       try { local = JSON.parse(localStorage.getItem("memos-local") || "[]"); if (!Array.isArray(local)) local = []; } catch {}
       const data = await apiGet();
-      if (data && data.length > 0) { setItems(data); setLastSync(new Date()); }
+      let wasDirty = false;
+      try { wasDirty = localStorage.getItem("memos-dirty") === "1"; } catch {}
+      if (wasDirty && local.length > 0) {
+        // des ajouts faits sur cet appareil n'avaient pas été envoyés : on les fusionne au lieu de les perdre
+        const byId = new Map(local.map(i => [i.id, i]));
+        const merged = [...local, ...(data || []).filter(i => !byId.has(i.id))];
+        setItems(merged);
+        const ok = await apiSet(merged);
+        if (ok) { try { localStorage.removeItem("memos-dirty"); } catch {} }
+        setLastSync(new Date());
+      }
+      else if (data && data.length > 0) { setItems(data); setLastSync(new Date()); }
       else if (local.length > 0) { setItems(local); await apiSet(local); setLastSync(new Date()); }
       setSyncing(false);
       setLoaded(true);
@@ -551,16 +564,20 @@ export default function Home() {
     try { localStorage.setItem("memos-local", JSON.stringify(items)); } catch {}
     if (skipRef.current) { skipRef.current = false; return; }
     dirtyRef.current = true;
+    try { localStorage.setItem("memos-dirty", "1"); } catch {}
     const ver = ++verRef.current;
     const t = setTimeout(async () => {
       busyRef.current = true;
       setSyncing(true);
-      await apiSet(items);
+      const ok = await apiSet(items);
       busyRef.current = false;
-      if (verRef.current === ver) dirtyRef.current = false;
+      if (ok && verRef.current === ver) {
+        dirtyRef.current = false;
+        try { localStorage.removeItem("memos-dirty"); } catch {}
+      }
       setLastSync(new Date());
       setSyncing(false);
-    }, 1500);
+    }, 600);
     return () => clearTimeout(t);
   }, [items, loaded]);
 
@@ -578,13 +595,23 @@ export default function Home() {
 
   useEffect(() => {
     if (!loaded) return;
-    const onVisible = () => { if (document.visibilityState === "visible") pull(); };
+    // en quittant l'appli (verrouillage, changement d'app) : envoi immédiat des modifs en attente
+    const flush = () => {
+      if (dirtyRef.current && itemsRef.current.length > 0) {
+        apiSet(itemsRef.current, true).then(ok => {
+          if (ok) { dirtyRef.current = false; try { localStorage.removeItem("memos-dirty"); } catch {} }
+        });
+      }
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") pull(); else flush(); };
+    window.addEventListener("pagehide", flush);
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
     const id = setInterval(() => { if (document.visibilityState === "visible") pull(); }, 20000);
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
+      window.removeEventListener("pagehide", flush);
       clearInterval(id);
     };
   }, [loaded, pull]);
@@ -661,23 +688,6 @@ export default function Home() {
               color: "#374151", background: "#fff", fontFamily: "inherit", boxSizing: "border-box",
             }} />
           </div>
-
-          {/* FILTRE MARQUE */}
-          {activeSpace === "work" && (
-            <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-              {[{ id: "all", label: "Tout", color: "#111827" }, ...Object.values(BRANDS)].map(b => {
-                const n = items.filter(i => !i.done && (b.id === "all" ? spaceOfItem(i.spaceId) === "work" : i.spaceId === b.id)).length;
-                const on = brandFilter === b.id;
-                return (
-                  <button key={b.id} onClick={() => setBrandFilter(b.id)} style={{
-                    flex: 1, padding: "8px 6px", borderRadius: 20, fontFamily: "inherit",
-                    background: on ? b.color : "#fff", color: on ? "#fff" : "#6b7280",
-                    border: `1.5px solid ${on ? b.color : "#e5e7eb"}`, fontSize: 13, fontWeight: 700,
-                  }}>{b.label} <span style={{ opacity: 0.7, fontWeight: 600 }}>{n}</span></button>
-                );
-              })}
-            </div>
-          )}
 
           {/* PRIORITY BLOCKS */}
           {!loaded ? (
